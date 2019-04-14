@@ -48,7 +48,7 @@ struct kthread{
   struct trapframe *tf;        // Trap frame for current syscall
   struct context *context;     // swtch() here to run thread
   void *chan;                  // If non-zero, sleeping on chan
-  int killed;
+  int killed;                  // If non-zero, have been killed
 };
 
 // Per-process state

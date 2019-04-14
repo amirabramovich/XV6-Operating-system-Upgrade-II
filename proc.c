@@ -276,6 +276,7 @@ exit(void)
 {
   struct proc *curproc = myproc();
   struct proc *p;
+  struct kthread *t;
   int fd;
 
   if(curproc == initproc)
@@ -308,8 +309,17 @@ exit(void)
     }
   }
 
+  for(t = curproc->kthreads; t < &curproc->kthreads[NTHREAD];t++){
+    t->tid = 0;
+    if(t->state != UNUSED)
+      t->state = ZOMBIE;
+    t->chan = 0;
+    t->process = 0;
+  }
+
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+  mythread()->state = ZOMBIE;
   sched();
   panic("zombie exit");
 }
@@ -379,6 +389,7 @@ scheduler(void)
   struct kthread *t;
   struct cpu *c = mycpu();
   c->proc = 0;
+  c->kthread = 0;
   
   for(;;){
     // Enable interrupts on this processor.
@@ -515,6 +526,15 @@ sleep(void *chan, struct spinlock *lk)
   }
 }
 
+void 
+wakeup2(struct proc *p, void* chan)
+{
+	struct kthread *t;
+	for(t = p->kthreads ; t < &p->kthreads[NTHREAD] ; t++)
+    if(t->state == SLEEPING && t->chan == chan)
+      t->state = RUNNABLE;
+}
+
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
@@ -522,12 +542,8 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-  struct kthread *t;
-
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    for(t = p->kthreads ; t < &p->kthreads[NTHREAD] ; t++)
-      if(t->state == SLEEPING && t->chan == chan)
-        t->state = RUNNABLE;
+    wakeup2(p, chan);
 }
 
 // Wake up all processes sleeping on chan.
@@ -600,5 +616,95 @@ procdump(void)
       }
     cprintf("\n");
     }
+  }
+}
+
+int 
+kthread_create(void (*start_func)(), void* stack)
+{
+  struct kthread* nt;
+	if((nt = allocthread(myproc())) == 0)
+		return -1;
+	*nt->tf = *mythread()->tf;
+	nt->tf->eip = (uint)start_func;
+	nt->tf->esp = (uint)(stack + KSTACKSIZE);
+
+	nt->state = RUNNABLE;
+
+	return nt->tid;
+}
+
+int 
+kthread_id(void)
+{
+  return mythread()->tid;
+}
+
+void 
+kthread_exit(void)
+{
+  struct proc *p = myproc();
+  struct kthread *currthread = mythread();
+  struct kthread *t;
+  int counter;
+  acquire(&ptable.lock);
+
+  for(t = p->kthreads, counter = 0 ; t < &p->kthreads[NTHREAD]; t++){
+    if(t->tid != currthread->tid && t->state != ZOMBIE && t->state != UNUSED){
+      counter++;
+    }
+  }
+  if(counter == NTHREAD-1){
+    release(&ptable.lock);
+    exit();
+  }else{
+    currthread->tf = 0;
+    currthread->state = ZOMBIE;
+    wakeup2(p, currthread);
+    // Jump into the scheduler, never to return.
+    sched();
+    panic("zombie thread exit");
+  }
+}
+
+void 
+clear_stack(struct kthread *t)
+{
+  struct proc *p = myproc();
+  kfree(t->kstack);
+  t->kstack = 0;
+  t->state = UNUSED;
+  release(&p->lock);
+}
+
+int 
+kthread_join(int thread_id)
+{
+  struct proc *p = myproc();
+	struct kthread *t;
+	int found = 0;
+	
+	acquire(&p->lock);
+	
+	for(t = p->kthreads; t < &p->kthreads[NTHREAD] && !found ; t++){
+		if(t->tid == thread_id)
+			found = 1;
+	}
+	if(!found){
+		release(&p->lock);
+		return -1;
+	}
+	if(t->state == UNUSED){
+  	release(&p->lock);
+  	return 0;
+  }
+	else if(t->state == ZOMBIE){
+    clear_stack(t);
+    return 0;
+  }else{
+  	while(t->state != ZOMBIE)
+  		sleep(t, &p->lock);
+  	clear_stack(t);
+    return 0;
   }
 }

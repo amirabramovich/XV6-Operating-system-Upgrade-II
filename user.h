@@ -2,6 +2,10 @@ struct stat;
 struct rtcdate;
 
 // system calls
+int kthread_create(void *, void*);
+int kthread_id(void);
+int kthread_exit(void);
+int kthread_join(int);
 int fork(void);
 int exit(void) __attribute__((noreturn));
 int wait(void);
