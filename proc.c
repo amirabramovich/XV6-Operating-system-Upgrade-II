@@ -269,19 +269,13 @@ fork(void)
   return pid;
 }
 
-// Exit the current process.  Does not return.
-// An exited process remains in the zombie state
-// until its parent calls wait() to find out it exited.
 void
-exit(void)
+close_all(void)
 {
   struct proc *curproc = myproc();
   struct proc *p;
   struct kthread *t;
   int fd;
-
-  if(curproc == initproc)
-    panic("init exiting");
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
@@ -318,11 +312,43 @@ exit(void)
     t->process = 0;
   }
 
-  // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   mythread()->state = ZOMBIE;
   sched();
   panic("zombie exit");
+
+}
+
+// Exit the current process.  Does not return.
+// An exited process remains in the zombie state
+// until its parent calls wait() to find out it exited.
+void
+exit(void)
+{
+  struct proc *curproc = myproc();
+  struct kthread *t;
+  int count = 0;
+
+  if(curproc == initproc)
+    panic("init exiting");
+
+
+  acquire(&ptable.lock);
+
+  for(t = curproc->kthreads; t < &curproc->kthreads[NTHREAD];t++){
+    if(t->state == UNUSED || t->state == ZOMBIE)
+      count++;
+  }
+  if(count == NTHREAD-1) {
+    release(&ptable.lock);
+    close_all();
+  }else{
+    // Jump into the scheduler, never to return.
+    curproc->killed = 1;
+    mythread()->state = ZOMBIE;
+    sched();
+    panic("zombie exit");
+  }
 }
 
 // Wait for a child process to exit and return its pid.
