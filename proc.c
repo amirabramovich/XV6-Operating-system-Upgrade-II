@@ -5,6 +5,7 @@
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
+#include "kthread.h"
 #include "spinlock.h"
 
 struct {
@@ -439,14 +440,14 @@ void
 sched(void)
 {
   int intena;
-  struct proc *p = myproc();
+  //struct proc *p = myproc();
   struct kthread *t = mythread();
 
   if(!holding(&ptable.lock))
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  if(p->state == RUNNING)
+  if(t->state == RUNNING)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
@@ -623,13 +624,16 @@ int
 kthread_create(void (*start_func)(), void* stack)
 {
   struct kthread* nt;
-	if((nt = allocthread(myproc())) == 0)
+  struct proc* curproc = myproc();
+	if((nt = allocthread(curproc)) == 0)
 		return -1;
 	*nt->tf = *mythread()->tf;
 	nt->tf->eip = (uint)start_func;
-	nt->tf->esp = (uint)(stack + KSTACKSIZE);
-
+	nt->tf->esp = (uint)(stack + MAX_STACK_SIZE);
+  nt->tf->eflags = FL_IF;
+  acquire(&curproc->lock);
 	nt->state = RUNNABLE;
+  release(&curproc->lock);
 
 	return nt->tid;
 }
@@ -667,44 +671,37 @@ kthread_exit(void)
   }
 }
 
-void 
-clear_stack(struct kthread *t)
-{
-  struct proc *p = myproc();
-  kfree(t->kstack);
-  t->kstack = 0;
-  t->state = UNUSED;
-  release(&p->lock);
-}
+int kthread_join(int thread_id){
+	struct kthread* t;
+	struct proc *p = myproc();
+  int found = 0;
 
-int 
-kthread_join(int thread_id)
-{
-  struct proc *p = myproc();
-	struct kthread *t;
-	int found = 0;
-	
 	acquire(&p->lock);
 	
-	for(t = p->kthreads; t < &p->kthreads[NTHREAD] && !found ; t++){
-		if(t->tid == thread_id)
+	for(t = p->kthreads; t < &p->kthreads[NTHREAD] ; t++){
+		if(t->tid == thread_id){
 			found = 1;
+			break;
+		}
 	}
 	if(!found){
 		release(&p->lock);
 		return -1;
 	}
-	if(t->state == UNUSED){
+	if(t->state==UNUSED){
   	release(&p->lock);
   	return 0;
-  }
-	else if(t->state == ZOMBIE){
-    clear_stack(t);
+  }else if(t->state == ZOMBIE){
+		clear_stack:
+    kfree(t->kstack);
+    t->kstack = 0;
+    t->state = UNUSED;
+    release(&p->lock);
     return 0;
   }else{
-  	while(t->state != ZOMBIE)
-  		sleep(t, &p->lock);
-  	clear_stack(t);
-    return 0;
+  	while(t->state!=ZOMBIE)
+  		sleep(t,&p->lock);
+  	goto clear_stack;
   }
+  return 0;
 }
