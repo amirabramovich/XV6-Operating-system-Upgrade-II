@@ -66,6 +66,13 @@ struct proc {
   struct spinlock lock;        
 };
 
+struct kthread_mutex{
+  struct spinlock lock;
+  int locked;
+  int used;
+  int waiting; 
+};
+
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss

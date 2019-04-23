@@ -13,6 +13,11 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct {
+  struct spinlock lock;
+  struct kthread_mutex mutex[MAX_MUTEXES];
+} mtable;
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -26,6 +31,7 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  initlock(&mtable.lock, "mtable");
 }
 
 // Must be called with interrupts disabled
@@ -697,7 +703,9 @@ kthread_exit(void)
   }
 }
 
-int kthread_join(int thread_id){
+int 
+kthread_join(int thread_id)
+{
 	struct kthread* t;
 	struct proc *p = myproc();
   int found = 0;
@@ -730,4 +738,82 @@ int kthread_join(int thread_id){
   	goto clear_stack;
   }
   return 0;
+}
+
+int 
+kthread_mutex_alloc()
+{
+  struct kthread_mutex * mutex;
+
+  acquire(&mtable.lock);
+  for(int i = 0; i < MAX_MUTEXES ; i++){
+    if(!mtable.mutex[i].used){
+      mtable.mutex[i].used = 1;
+      release(&mtable.lock);
+      mutex = &mtable.mutex[i];
+      mutex->locked = 0;
+      mutex->waiting = 0;
+      initlock(&mutex->lock,"mutexlock");
+      return i;
+    }
+  }
+  release(&mtable.lock);
+  return -1;
+
+}
+
+int 
+kthread_mutex_dealloc(int mutex_id)
+{
+  struct kthread_mutex* mutex = &mtable.mutex[mutex_id];
+
+  acquire(&mtable.lock);
+  if(mutex->used == 0 || mutex->locked == 1 || mutex->waiting > 0){
+    release(&mtable.lock);
+    return -1;
+  }
+  mutex->used = 0;
+  release(&mtable.lock);
+  return 0;
+}
+
+int 
+kthread_mutex_lock(int mutex_id)
+{
+  struct kthread_mutex* mutex = &mtable.mutex[mutex_id];
+
+  acquire(&mutex->lock);
+  if(!mutex->used){
+    release(&mutex->lock);
+    return -1;
+  }
+  if(mutex->locked){
+    mutex->waiting++;
+    sleep(&mutex->lock,&mutex->lock);
+  }else{
+    mutex->locked = 1;
+  }
+  release(&mutex->lock);
+
+  return 0;
+}
+
+int 
+kthread_mutex_unlock(int mutex_id)
+{
+    struct kthread_mutex* mutex = &mtable.mutex[mutex_id];
+
+    acquire(&mutex->lock);
+    if(!mutex->used || !mutex->locked){
+      release(&mutex->lock);
+      return -1;
+    }
+    if(mutex->waiting > 0){
+      mutex->waiting--;
+      wakeup(&mutex->lock);
+    }else{
+      mutex->locked = 0;
+    }
+    release(&mutex->lock);
+    return 0;
 }
