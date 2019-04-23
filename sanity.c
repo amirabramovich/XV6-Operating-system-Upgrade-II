@@ -18,9 +18,9 @@ infinite(void)
 }
 
 void
-test0(void){
-	printf(1,"test0 pid is %d and tid is %d\n",getpid(), kthread_id());
-	printf(1,"test0 done\n");
+test3(void){
+	printf(1,"test3 pid is %d and tid is %d\n",getpid(), kthread_id());
+	printf(1,"test3 done\n");
 	kthread_exit();
 }
 
@@ -31,23 +31,32 @@ test1(void)
 	printf(1,"test1 pid is %d and tid is %d\n",getpid(), kthread_id());
     kthread_create(infinite, stack);
     sleep(60);
-    printf(0, "test1 done\n");
     exit();
 }
 
 int
-main(int argc, char *argv[]){
-	int pid = fork();
-	if(pid == 0){
+main(int argc, char *argv[])
+{
+	if(fork() == 0){
 		test1();
 	}else{
 		wait();
-		void* stack = (void*)malloc(4000);
-		int tid = kthread_create(&test0, stack);
-		printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
-		kthread_join(tid);	
-		printf(1,"main done\n");
-		exit();
+		printf(0, "\ntest1 done\n");
+		if(fork() == 0){
+			printf(1,"test2 pid is %d and tid is %d\n",getpid(), kthread_id());
+			char* empty = "";
+			exec("ls", &empty);
+		}else{
+			wait();
+			printf(1,"test2 done\n");
+			void* stack = (void*)malloc(4000);
+			int tid = kthread_create(&test3, stack);
+			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
+			kthread_join(tid);	
+			printf(1,"main done\n");
+			exit();
+		}
 	}
 }
+
 

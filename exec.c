@@ -6,6 +6,47 @@
 #include "defs.h"
 #include "x86.h"
 #include "elf.h"
+#include "kthread.h"
+
+void 
+kill_rest(void)
+{
+  struct proc *curproc = myproc();
+  struct kthread *curthread = mythread();
+  struct kthread* t;
+  int remaining;
+  acquire(&curproc->lock);
+  for(;;){
+    if(myproc()->killed){
+      release(&curproc->lock);
+      exit();
+    }
+    remaining = 0;
+    for(t=curproc->kthreads;t<&curproc->kthreads[NTHREAD];t++){
+
+      if(t == curthread || t->state == UNUSED)
+        continue;
+      if(t->state == ZOMBIE){
+        t->state = UNUSED;
+        kfree(t->kstack);
+        t->kstack = 0;
+        continue;
+      }
+      if(t->state == SLEEPING)
+        t->state = RUNNABLE;
+      
+      t->killed = 1;
+      release(&curproc->lock);
+      kthread_join(t->tid);
+      acquire(&curproc->lock);
+      remaining = 1;
+    }
+    if(!remaining){
+      release(&curproc->lock);
+      return;
+    }
+  }
+}
 
 int
 exec(char *path, char **argv)
@@ -19,6 +60,8 @@ exec(char *path, char **argv)
   pde_t *pgdir, *oldpgdir;
   struct proc *curproc = myproc();
   struct kthread *curthread = mythread();
+
+  kill_rest();
 
   begin_op();
 
