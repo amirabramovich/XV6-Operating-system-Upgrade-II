@@ -2,14 +2,14 @@ struct stat;
 struct rtcdate;
 
 // system calls
-int kthread_create(void *, void*);
-int kthread_id(void);
-int kthread_exit(void);
-int kthread_join(int);
-int kthread_mutex_alloc(void);
-int kthread_mutex_dealloc(int);
-int kthread_mutex_lock(int);
-int kthread_mutex_unlock(int);
+int kthread_create(void (*start_func)(), void* stack);
+int kthread_id();
+void kthread_exit();
+int kthread_join(int thread_id);
+int kthread_mutex_alloc();
+int kthread_mutex_dealloc(int mutex_id);
+int kthread_mutex_lock(int mutex_id);
+int kthread_mutex_unlock(int mutex_id);
 int fork(void);
 int exit(void) __attribute__((noreturn));
 int wait(void);

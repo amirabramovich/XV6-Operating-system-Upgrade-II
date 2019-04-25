@@ -1,13 +1,8 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
+#include "tournament_tree.c"
 
-int
-fibonacci(int num){
-    if (num <= 1) 
-      return num; 
-   return fibonacci(num - 1) + fibonacci(num - 2);
-}
 
 void 
 infinite(void)
@@ -19,6 +14,7 @@ infinite(void)
 
 void
 test3(void){
+	sleep(20);
 	printf(1,"test3 pid is %d and tid is %d\n",getpid(), kthread_id());
 	printf(1,"test3 done\n");
 	kthread_exit();
@@ -34,29 +30,112 @@ test1(void)
     exit();
 }
 
+void
+test6(void){
+	printf(1,"test6 pid is %d and tid is %d\n",getpid(), kthread_id());
+	int mutex = kthread_mutex_alloc();
+	printf(1,"test6 alloced mutex %d\n",mutex);
+	if(kthread_mutex_lock(mutex)==0)
+		printf(1,"test6 locked mutex %d\n",mutex);
+	sleep(100);
+	if(kthread_mutex_unlock(mutex)==0)
+		printf(1,"test6 unlocked mutex %d\n",mutex);
+	printf(1,"test6 done\n");
+	kthread_exit();
+}
+
+void
+test7(void){
+	printf(1,"test7 pid is %d and tid is %d\n",getpid(), kthread_id());
+	trnmnt_tree* tree = trnmnt_tree_alloc(3);
+	printf(1,"test7 alloced tree\n");
+	if(trnmnt_tree_acquire(tree, 0)==0)
+		printf(1,"test7 locked tree\n");
+	sleep(50);
+	if(trnmnt_tree_release(tree, 0)==0)
+		printf(1,"test7 unlocked tree\n");
+	if(trnmnt_tree_dealloc(tree)==0)
+		printf(1,"test7 dealloced tree\n");
+	printf(1,"test7 done\n");
+	kthread_exit();
+}
+
 int
 main(int argc, char *argv[])
 {
-	if(fork() == 0){
-		test1();
-	}else{
-		wait();
-		printf(0, "\ntest1 done\n");
-		if(fork() == 0){
-			printf(1,"test2 pid is %d and tid is %d\n",getpid(), kthread_id());
+	int user_select = atoi(argv[1]);
+	void* stack;
+	int tid;
+    switch (user_select){
+        case 1: // Checks proccess exit while another thread is running
+            test1();
+		case 2: // Checks EXEC
+            printf(1,"test2 pid is %d and tid is %d\n",getpid(), kthread_id());
 			char* empty = "";
 			exec("ls", &empty);
-		}else{
-			wait();
-			printf(1,"test2 done\n");
-			void* stack = (void*)malloc(4000);
-			int tid = kthread_create(&test3, stack);
+		case 3: // Checks thread join
+			stack = (void*)malloc(4000);
+			tid = kthread_create(&test3, stack);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 			kthread_join(tid);	
 			printf(1,"main done\n");
 			exit();
-		}
+        case 4: // Checks all 3 tests together in different proccesses
+			if(fork() == 0){
+				test1();
+			}else{
+				wait();
+				printf(0, "\ntest1 done\n");
+				if(fork() == 0){
+					printf(1,"test2 pid is %d and tid is %d\n",getpid(), kthread_id());
+					char* empty = "";
+					exec("ls", &empty);
+				}else{
+					wait();
+					printf(1,"test2 done\n");
+					void* stack = (void*)malloc(4000);
+					int tid = kthread_create(&test3, stack);
+					printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
+					kthread_join(tid);	
+					printf(1,"main done\n");
+					exit();
+				}
+			}
+		case 5: // Checks thread EXEC while another thread is running
+        	stack = (void*)malloc(4000);
+			printf(1,"test5 pid is %d and tid is %d\n",getpid(), kthread_id());
+			kthread_create(infinite, stack);
+			sleep(60);
+			exec("ls", &empty);
+		case 6: // Checks Mutex
+			stack = (void*)malloc(4000);
+			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
+			tid = kthread_create(&test6, stack);
+			if(kthread_mutex_lock(0)==0)
+				printf(1,"main locked mutex %d\n",0);
+			else if(kthread_mutex_lock(0)<0)
+				printf(1,"main can't lock mutex %d\n",0);
+			sleep(20);
+			if(kthread_mutex_lock(0)==0)
+				printf(1,"main locked mutex %d\n",0);
+			else if(kthread_mutex_lock(0)<0)
+				printf(1,"main can't lock mutex %d\n",0);
+			if(kthread_mutex_unlock(0)==0)
+				printf(1,"main unlocked mutex %d\n",0);
+			if(kthread_mutex_dealloc(0)==0)
+				printf(1,"main dealloced mutex %d\n",0);
+			printf(1,"main done\n");
+			exit();
+		case 7: // Checks tournament tree
+			stack = (void*)malloc(4000);
+			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
+			tid = kthread_create(&test7, stack);
+			kthread_join(tid);	
+			printf(1,"main done\n");
+			exit();
+
+		default:
+			printf(1,"usage: sanity <1-7>\n");
+			exit();
 	}
 }
-
-

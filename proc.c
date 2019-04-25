@@ -3,10 +3,8 @@
 #include "param.h"
 #include "memlayout.h"
 #include "mmu.h"
-#include "x86.h"
 #include "proc.h"
 #include "kthread.h"
-#include "spinlock.h"
 
 struct {
   struct spinlock lock;
@@ -722,22 +720,18 @@ kthread_join(int thread_id)
 		release(&p->lock);
 		return -1;
 	}
-	if(t->state==UNUSED){
+	if(t->state == UNUSED){
   	release(&p->lock);
   	return 0;
-  }else if(t->state == ZOMBIE){
-		clear_stack:
-    kfree(t->kstack);
+  }else{
+  	while(t->state!=ZOMBIE)
+  		sleep(t,&p->lock);
+  	kfree(t->kstack);
     t->kstack = 0;
     t->state = UNUSED;
     release(&p->lock);
     return 0;
-  }else{
-  	while(t->state!=ZOMBIE)
-  		sleep(t,&p->lock);
-  	goto clear_stack;
   }
-  return 0;
 }
 
 int 
