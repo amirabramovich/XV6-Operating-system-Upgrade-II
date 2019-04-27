@@ -340,7 +340,7 @@ exit(void)
   acquire(&ptable.lock);
 
   for(t = curproc->kthreads; t < &curproc->kthreads[NTHREAD];t++){
-    if(t->state == UNUSED || t->state == ZOMBIE)
+    if(t->tid != mythread()->tid && (t->state == UNUSED || t->state == ZOMBIE))
       count++;
   }
   if(count == NTHREAD-1) {
@@ -557,6 +557,25 @@ sleep(void *chan, struct spinlock *lk)
   }
 }
 
+// Wake up single thread sleeping on chan and returns it
+struct kthread*
+wakeup3(void *chan)
+{
+  struct proc *p;
+  struct kthread *t;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+	  for(t = p->kthreads ; t < &p->kthreads[NTHREAD] ; t++)
+      if(t->state == SLEEPING && t->chan == chan){
+        t->state = RUNNABLE;
+        release(&ptable.lock);
+        return t;
+      }
+  release(&ptable.lock);
+  return 0;
+}
+
+// Wake up all threads in proc sleeping on chan
 void 
 wakeup2(struct proc *p, void* chan)
 {
@@ -680,11 +699,11 @@ kthread_exit(void)
   struct proc *p = myproc();
   struct kthread *currthread = mythread();
   struct kthread *t;
-  int counter;
+  int counter = 0;
   acquire(&ptable.lock);
 
-  for(t = p->kthreads, counter = 0 ; t < &p->kthreads[NTHREAD]; t++){
-    if(t->tid != currthread->tid && t->state != ZOMBIE && t->state != UNUSED){
+  for(t = p->kthreads; t < &p->kthreads[NTHREAD]; t++){
+    if(t->tid != currthread->tid && (t->state == ZOMBIE || t->state == UNUSED)){
       counter++;
     }
   }
@@ -722,9 +741,9 @@ kthread_join(int thread_id)
 	}
 	if(t->state == UNUSED){
   	release(&p->lock);
-  	return 0;
+  	return -1;
   }else{
-  	while(t->state!=ZOMBIE)
+  	while(t->state != ZOMBIE && t->state != UNUSED)
   		sleep(t,&p->lock);
   	kfree(t->kstack);
     t->kstack = 0;
@@ -745,7 +764,7 @@ kthread_mutex_alloc()
       mtable.mutex[i].used = 1;
       release(&mtable.lock);
       mutex = &mtable.mutex[i];
-      mutex->locked = 0;
+      mutex->kthread = 0;
       mutex->waiting = 0;
       initlock(&mutex->lock,"mutexlock");
       return i;
@@ -762,7 +781,7 @@ kthread_mutex_dealloc(int mutex_id)
   struct kthread_mutex* mutex = &mtable.mutex[mutex_id];
 
   acquire(&mtable.lock);
-  if(mutex->used == 0 || mutex->locked == 1 || mutex->waiting > 0){
+  if(mutex->used == 0 || mutex->kthread != 0 || mutex->waiting > 0){
     release(&mtable.lock);
     return -1;
   }
@@ -781,11 +800,11 @@ kthread_mutex_lock(int mutex_id)
     release(&mutex->lock);
     return -1;
   }
-  if(mutex->locked){
+  if(mutex->kthread){
     mutex->waiting++;
     sleep(&mutex->lock,&mutex->lock);
   }else{
-    mutex->locked = 1;
+    mutex->kthread = mythread();
   }
   release(&mutex->lock);
 
@@ -798,15 +817,15 @@ kthread_mutex_unlock(int mutex_id)
     struct kthread_mutex* mutex = &mtable.mutex[mutex_id];
 
     acquire(&mutex->lock);
-    if(!mutex->used || !mutex->locked){
+    if(!mutex->used || mutex->kthread!=mythread()){
       release(&mutex->lock);
       return -1;
     }
     if(mutex->waiting > 0){
       mutex->waiting--;
-      wakeup(&mutex->lock);
+      mutex->kthread = wakeup3(&mutex->lock);
     }else{
-      mutex->locked = 0;
+      mutex->kthread = 0;
     }
     release(&mutex->lock);
     return 0;

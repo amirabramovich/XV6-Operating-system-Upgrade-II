@@ -58,8 +58,7 @@ sys_kthread_join(void)
   int kthread_id;
   if(argint(0, &kthread_id) < 0)
     return -1;
-  kthread_join(kthread_id);
-  return 0;
+  return kthread_join(kthread_id);
 }
 
 int 

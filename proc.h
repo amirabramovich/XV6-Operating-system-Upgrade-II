@@ -68,7 +68,7 @@ struct proc {
 
 struct kthread_mutex{
   struct spinlock lock;
-  int locked;
+  struct kthread *kthread;
   int used;
   int waiting; 
 };

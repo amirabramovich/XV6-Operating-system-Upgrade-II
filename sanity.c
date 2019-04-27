@@ -1,8 +1,9 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-#include "tournament_tree.c"
+#include "tournament_tree.h"
 
+trnmnt_tree* tree;
 
 void 
 infinite(void)
@@ -46,17 +47,21 @@ test6(void){
 
 void
 test7(void){
-	printf(1,"test7 pid is %d and tid is %d\n",getpid(), kthread_id());
-	trnmnt_tree* tree = trnmnt_tree_alloc(3);
-	printf(1,"test7 alloced tree\n");
 	if(trnmnt_tree_acquire(tree, 0)==0)
 		printf(1,"test7 locked tree\n");
 	sleep(50);
 	if(trnmnt_tree_release(tree, 0)==0)
 		printf(1,"test7 unlocked tree\n");
-	if(trnmnt_tree_dealloc(tree)==0)
-		printf(1,"test7 dealloced tree\n");
-	printf(1,"test7 done\n");
+	kthread_exit();
+}
+
+void
+test8(void){
+	if(trnmnt_tree_acquire(tree, 1)==0)
+		printf(1,"test8 locked tree\n");
+	sleep(50);
+	if(trnmnt_tree_release(tree, 1)==0)
+		printf(1,"test8 unlocked tree\n");
 	kthread_exit();
 }
 
@@ -65,7 +70,7 @@ main(int argc, char *argv[])
 {
 	int user_select = atoi(argv[1]);
 	void* stack;
-	int tid;
+	int tid, tid2;
     switch (user_select){
         case 1: // Checks proccess exit while another thread is running
             test1();
@@ -128,9 +133,17 @@ main(int argc, char *argv[])
 			exit();
 		case 7: // Checks tournament tree
 			stack = (void*)malloc(4000);
+			void* stack2 = (void*)malloc(4000);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
+			tree = trnmnt_tree_alloc(3);
+			if (tree!=0);
+				printf(1,"main alloced tree\n");
 			tid = kthread_create(&test7, stack);
+			tid2 = kthread_create(&test8, stack2);
 			kthread_join(tid);	
+			kthread_join(tid2);	
+			if(trnmnt_tree_dealloc(tree)==0)
+				printf(1,"main dealloced tree\n");
 			printf(1,"main done\n");
 			exit();
 

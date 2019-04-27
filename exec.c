@@ -22,26 +22,25 @@ kill_rest(void)
       exit();
     }
     remaining = 0;
-    for(t=curproc->kthreads;t<&curproc->kthreads[NTHREAD];t++){
+    for(t=curproc->kthreads;t<&curproc->kthreads[NTHREAD];t++)
+      if(t != curthread && t->state != UNUSED)
+        t->killed = 1;
 
-      if(t == curthread || t->state == UNUSED)
-        continue;
-      if(t->state == ZOMBIE){
-        t->state = UNUSED;
-        kfree(t->kstack);
-        t->kstack = 0;
-        continue;
+    for(t=curproc->kthreads;t<&curproc->kthreads[NTHREAD];t++){
+      if(t != curthread && t->state != UNUSED){
+        remaining = 1;
+        if(t->state == SLEEPING)
+          t->state = RUNNABLE;
+        while(t->state != ZOMBIE && t->state != UNUSED)
+          sleep(t,&curproc->lock);
+        if(t->state == ZOMBIE){
+          kfree(t->kstack);
+          t->kstack = 0;
+          t->state = UNUSED;
+        }
       }
-      if(t->state == SLEEPING)
-        t->state = RUNNABLE;
-      
-      t->killed = 1;
-      release(&curproc->lock);
-      kthread_join(t->tid);
-      acquire(&curproc->lock);
-      remaining = 1;
     }
-    if(!remaining){
+    if(remaining == 0){
       release(&curproc->lock);
       return;
     }

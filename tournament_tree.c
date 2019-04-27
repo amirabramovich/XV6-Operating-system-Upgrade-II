@@ -1,3 +1,6 @@
+#include "types.h"
+#include "stat.h"
+#include "user.h"
 #include "tournament_tree.h"
 
 int 
