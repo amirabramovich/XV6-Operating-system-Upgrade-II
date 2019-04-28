@@ -69,7 +69,6 @@ int
 main(int argc, char *argv[])
 {
 	int user_select = atoi(argv[1]);
-	void* stack;
 	int tid, tid2;
     switch (user_select){
         case 1: // Checks proccess exit while another thread is running
@@ -79,12 +78,12 @@ main(int argc, char *argv[])
 			char* empty = "";
 			exec("ls", &empty);
 		case 3: // Checks thread join
-			stack = (void*)malloc(4000);
+			{void* stack = (void*)malloc(4000);
 			tid = kthread_create(&test3, stack);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 			kthread_join(tid);	
 			printf(1,"main done\n");
-			exit();
+			exit();}
         case 4: // Checks all 3 tests together in different proccesses
 			if(fork() == 0){
 				test1();
@@ -99,21 +98,15 @@ main(int argc, char *argv[])
 					wait();
 					printf(1,"test2 done\n");
 					void* stack = (void*)malloc(4000);
-					int tid = kthread_create(&test3, stack);
+					tid = kthread_create(&test3, stack);
 					printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 					kthread_join(tid);	
 					printf(1,"main done\n");
 					exit();
 				}
 			}
-		case 5: // Checks thread EXEC while another thread is running
-        	stack = (void*)malloc(4000);
-			printf(1,"test5 pid is %d and tid is %d\n",getpid(), kthread_id());
-			kthread_create(infinite, stack);
-			sleep(60);
-			exec("ls", &empty);
-		case 6: // Checks Mutex
-			stack = (void*)malloc(4000);
+		case 5: // Checks Mutex
+			{void* stack = (void*)malloc(4000);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 			tid = kthread_create(&test6, stack);
 			if(kthread_mutex_lock(0)==0)
@@ -130,9 +123,9 @@ main(int argc, char *argv[])
 			if(kthread_mutex_dealloc(0)==0)
 				printf(1,"main dealloced mutex %d\n",0);
 			printf(1,"main done\n");
-			exit();
-		case 7: // Checks tournament tree
-			stack = (void*)malloc(4000);
+			exit();}
+		case 6: // Checks tournament tree
+			{void* stack = (void*)malloc(4000);
 			void* stack2 = (void*)malloc(4000);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 			tree = trnmnt_tree_alloc(3);
@@ -145,10 +138,10 @@ main(int argc, char *argv[])
 			if(trnmnt_tree_dealloc(tree)==0)
 				printf(1,"main dealloced tree\n");
 			printf(1,"main done\n");
-			exit();
+			exit();}
 
 		default:
-			printf(1,"usage: sanity <1-7>\n");
+			printf(1,"usage: sanity <1-6>\n");
 			exit();
 	}
 }
