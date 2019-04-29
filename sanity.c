@@ -129,7 +129,7 @@ main(int argc, char *argv[])
 			void* stack2 = (void*)malloc(4000);
 			printf(1,"main pid is %d and tid is %d\n",getpid(), kthread_id());
 			tree = trnmnt_tree_alloc(3);
-			if (tree!=0);
+			if (tree!=0)
 				printf(1,"main alloced tree\n");
 			tid = kthread_create(&test7, stack);
 			tid2 = kthread_create(&test8, stack2);
